@@ -6,8 +6,8 @@ from gpytorch.kernels import RBFKernel, ScaleKernel
 from skgpytorch.models import ExactGPRegressor, ExactNSGPRegressor
 from skgpytorch.metrics import mean_squared_error
 
-from nsgp_torch.models import GP
-from nsgp_torch.kernels import rbf
+from nsgptorch.models import GP
+from nsgptorch.kernels import rbf
 
 
 @pytest.mark.eq2d

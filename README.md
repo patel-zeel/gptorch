@@ -36,13 +36,13 @@ mse = mean_squared_error(pred_dist, y_test, squared=False)
 nlpd = neg_log_posterior_density(pred_dist, y_test)
 ```
 
-### `nsgp_torch` model with `skgpytorch`
+### `nsgptorch` model with `skgpytorch`
 ```python
 # Import packages
 import torch
 from regdata import NonStat2D
 
-from nsgp_torch.kernels import rbf
+from nsgptorch.kernels import rbf
 
 from skgpytorch.models import ExactNSGPRegressor
 from skgpytorch.metrics import mean_squared_error

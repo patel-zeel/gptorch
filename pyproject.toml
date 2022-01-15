@@ -9,4 +9,4 @@ requires = [
 	]
 
 [tool.setuptools_scm]
-write_to = "nsgp_torch/_version.py"
+write_to = "nsgptorch/_version.py"
