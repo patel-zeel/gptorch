@@ -3,7 +3,7 @@ import torch
 import gpytorch
 from regdata import Olympic, NonStat2D
 from gpytorch.kernels import RBFKernel, ScaleKernel
-from skgpytorch.models import ExactGPRegressor, ExactNSGPRegressor
+from skgpytorch.models import ExactGPRegressor
 from skgpytorch.metrics import mean_squared_error
 
 from nsgptorch.models import GP
@@ -23,11 +23,22 @@ def test_equals_2d():
     our_inducing = [None for _ in range(X_train.shape[1])]
 
     model = ExactGPRegressor(X_train, y_train, kernel)
-    our_model = ExactNSGPRegressor(our_kernel, X_train.shape[1], our_inducing)
+    our_model = GP(our_kernel, X_train.shape[1], our_inducing)
+
+    optimizer = torch.optim.Adam(our_model.parameters(), lr=0.1)
 
     for seed in range(10, 15):
         model.fit(n_iters=n_iters, random_state=seed)
-        our_model.fit(X_train, y_train, n_iters=n_iters, random_state=seed)
+
+        torch.manual_seed(seed)
+        for param in our_model.parameters():
+            torch.nn.init.normal_(param)
+
+        for _ in range(n_iters):
+            optimizer.zero_grad()
+            loss = our_model(X_train, y_train)
+            loss.backward()
+            optimizer.step()
 
         dist = model.predict(X_train, y_train, X_test)
         our_dist = our_model.predict(X_train, y_train, X_test)
