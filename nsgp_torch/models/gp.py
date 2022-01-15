@@ -62,6 +62,8 @@ class GP(torch.nn.Module):
     def predict(self, X_orig, y_orig, X_pred):
         with torch.no_grad():
             kern = self.compute_kern(X_orig, X_orig)
+            kdiag = kern.diagonal()
+            kdiag += log_exp(self.raw_global_noise_variance)
             l_kern = psd_safe_cholesky(kern)
             alpha = torch.cholesky_solve(y_orig.reshape(-1, 1) - self.raw_mean, l_kern)
             del kern
@@ -73,5 +75,5 @@ class GP(torch.nn.Module):
             kdiag = cov.diagonal()
             kdiag += log_exp(self.raw_global_noise_variance)
 
-            pred_dist = MultivariateNormal(mean, cov)
+            pred_dist = MultivariateNormal(mean.ravel(), cov)
             return pred_dist
