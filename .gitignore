@@ -2,4 +2,4 @@ __pycache__/
 *.vscode
 *.pyc
 *.egg-info/
-nsgp-torch/._version.py
+nsgp_torch/._version.py

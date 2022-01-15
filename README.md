@@ -1,4 +1,11 @@
-## Description
-* Add PYPI_USERNAME and PYPI_PASSWORD to your secrets using GitHub GUI.
-* Manually change requirements.txt to your needs.
-* Run `customize.py` to take care of the rest.
+## NSGP-Torch
+
+### Plan
+
+* Each kernel is 1D
+* Multiply kernels to each other
+
+### Idea
+* Compute distance once and save it
+* Update skgpytorch to use 1 std instead of 0.1
+* Do something about mean learning of gpytorch for comparison
