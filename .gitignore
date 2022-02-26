@@ -3,3 +3,4 @@ __pycache__/
 *.pyc
 *.egg-info/
 nsgptorch/_version.py
+tests/fig

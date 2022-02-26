@@ -1,79 +1,79 @@
 import torch
-from ..kernels.rbf import rbf, rbf_init
-from ..kernels.transforms import log_exp
-
-from gpytorch.utils.cholesky import psd_safe_cholesky
-from gpytorch.distributions import MultivariateNormal
+from torch.distributions import MultivariateNormal
+from ..noise import Noise
+from ..scale import Scale
 
 
 class GP(torch.nn.Module):
-    def __init__(self, kernel_list, input_dim, inducing_points):
-        super(GP, self).__init__()
-        assert len(kernel_list) == input_dim
-        assert len(inducing_points) == input_dim
+    def __init__(self, kernel_list, noise_lower_bound=1e-5, noise_constraint=None):
+        super().__init__()
+        assert isinstance(kernel_list, list), "kernel_list must be a list"
+        self.kernel_list = torch.nn.ModuleList(kernel_list)
+        self.noise = Noise(lower_bound=noise_lower_bound, constraint=noise_constraint)
+        self.scale = Scale()
 
-        self.kernel_list = kernel_list
+        self.mean = torch.nn.Parameter(torch.zeros(1, dtype=torch.float))
 
-        self.register_buffer("zero", torch.zeros(1, dtype=torch.float))
-        self.register_buffer("one", torch.ones(1, dtype=torch.float))
+    def compute_covar(self, X1, X2):
+        covar = 1.0
+        if self.training:
+            self.additional_loss_terms = []
+            for kernel in self.kernel_list:
+                if kernel.is_stationary():
+                    tmp_covar = kernel(X1, X2)
+                else:
+                    tmp_covar, local_loss = kernel(X1, X2)
+                    self.additional_loss_terms.append(local_loss)
 
-        # Initialize parameters
-        self.raw_global_variance = torch.nn.Parameter(
-            torch.tensor(0.0, dtype=torch.float)
-        )
-        self.raw_global_noise_variance = torch.nn.Parameter(
-            torch.tensor(0.0, dtype=torch.float)
-        )
-        self.raw_mean = torch.nn.Parameter(torch.tensor(0.0, dtype=torch.float))
-        for k_i, kernel in enumerate(kernel_list):
-            if kernel.__name__ == "rbf":
-                rbf_init(self, k_i)
-                assert inducing_points[k_i] is None
-            else:
-                pass
-                # TODO: Register inducing points as parameters
+                covar = covar * tmp_covar
+        else:
+            for kernel in self.kernel_list:
+                tmp_covar = kernel(X1, X2)
+                covar = covar * tmp_covar
 
-    def compute_kern(self, X1, X2):
-        kern = (log_exp(self.raw_global_variance) * self.one).repeat(
-            (X1.shape[0], X2.shape[0])
-        )
+        # Apply signal variance
+        covar = self.scale(covar)
+        return covar
 
-        for k_i, kernel in enumerate(self.kernel_list):
-            if kernel.__name__ == "rbf":
-                kern.mul_(
-                    kernel(
-                        X1[:, k_i],
-                        X2[:, k_i],
-                        self.get_parameter(f"raw_lengthscale{k_i}"),
-                    )
-                )
-        return kern
+    def forward(self, X, y=None, X_test=None, return_cov=True):
+        if self.training:
+            assert y is None, "y must be None in training mode"
+            assert X_test is None, "X_test must be None in training mode"
 
-    def forward(self, X, y):
-        kern = self.compute_kern(X, X)
+            # Compute the kernel matrix
+            covar = self.compute_covar(X, X)
 
-        kdiag = kern.diagonal()
-        kdiag += log_exp(self.raw_global_noise_variance)
+            # Apply noise variance
+            covar = self.noise(covar)
+            try:
+                distr = MultivariateNormal(self.mean.expand(X.shape[0]), covar)
+            except:
+                raise ValueError()
+            return distr
+        else:
+            K = self.compute_covar(X, X)
+            K = self.noise(K)
 
-        # dist = MultivariateNormal(self.zero.repeat(X.shape[0]), kern)
-        dist = MultivariateNormal(self.raw_mean.repeat(X.shape[0]), kern)
-        return -dist.log_prob(y) / X.numel()
+            L = torch.linalg.cholesky(K)
+            del K
 
-    def predict(self, X_orig, y_orig, X_pred):
-        with torch.no_grad():
-            kern = self.compute_kern(X_orig, X_orig)
-            kdiag = kern.diagonal()
-            kdiag += log_exp(self.raw_global_noise_variance)
-            l_kern = psd_safe_cholesky(kern)
-            alpha = torch.cholesky_solve(y_orig.reshape(-1, 1) - self.raw_mean, l_kern)
-            del kern
-            k_star = self.compute_kern(X_pred, X_orig)
-            k_star_star = self.compute_kern(X_pred, X_pred)
-            mean = k_star @ alpha + self.raw_mean
-            v = torch.cholesky_solve(k_star.T, l_kern)
-            cov = k_star_star - k_star @ v
-            kdiag = cov.diagonal()
-            kdiag += log_exp(self.raw_global_noise_variance)
+            # Mean prediction
+            alpha = torch.cholesky_solve(y.reshape(-1, 1) - self.mean, L)
+            k_star = self.compute_covar(X_test, X)
+            pred_mean = (k_star @ alpha) + self.mean
+            del alpha
+            if not return_cov:
+                return pred_mean.ravel()
 
-            pred_dist = MultivariateNormal(mean.ravel(), cov)
-            return pred_dist
+            # Covaariance prediction
+            k_star_star = self.compute_covar(X_test, X_test)
+            v = torch.cholesky_solve(k_star.T, L)
+            del L
+            pred_cov = k_star_star - k_star @ v
+            pred_cov = self.noise(pred_cov)
+
+            return pred_mean.ravel(), pred_cov
+
+    def set_train_data(self, X, y, strict=False):
+        # Just for skgpytorch compatibility, remove in future
+        pass

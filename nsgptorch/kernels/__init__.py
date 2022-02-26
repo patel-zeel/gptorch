@@ -1,1 +1,2 @@
-from .rbf import rbf, rbf_init
+from .rbf import RBF
+from .nsrbf import NSRBF

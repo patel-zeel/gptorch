@@ -2,8 +2,9 @@ import torch
 
 
 def sq_euclidean_distance(x, y):
-    for inp in [x, y]:
-        assert len(inp.shape) == 1 or inp.shape[1] == 1
+    """
+    x and y must be 1D arrays of the same length with shape (N,).
+    """
     return torch.pow(x.reshape(-1, 1) - y.reshape(1, -1), 2)
 
 
